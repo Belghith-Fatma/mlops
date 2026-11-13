@@ -1,25 +1,36 @@
+
+import os
 from typing import Literal
 
-import mlflow
 import mlflow.sklearn
 import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-# 1. Creer l'application
-app = FastAPI(title="API Churn")
+# --------------------------------------------------
+# 1. Initialisation de FastAPI
+# --------------------------------------------------
 
-# 2. Charger le modele champion une seule fois
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
-
-model = mlflow.sklearn.load_model(
-    "models:/churn-model@champion"
+app = FastAPI(
+    title="API Churn",
+    description="API de prédiction du départ des clients",
+    version="1.0.0"
 )
 
-# Recuperer les colonnes attendues par le modele
-features = list(model.feature_names_in_)
+# --------------------------------------------------
+# 2. Chargement du modèle local
+# --------------------------------------------------
 
-# 3. Definir les donnees attendues
+MODEL_PATH = os.getenv("MODEL_PATH", "model")
+
+model = mlflow.sklearn.load_model(MODEL_PATH)
+
+print(f"Modèle chargé depuis : {MODEL_PATH}")
+
+# --------------------------------------------------
+# 3. Définition des données d'entrée
+# --------------------------------------------------
+
 class Client(BaseModel):
     age: int
     salaire: float
@@ -27,27 +38,44 @@ class Client(BaseModel):
     anciennete: float
     consommation: float
 
-# 4. Route pour verifier que l'API fonctionne
+# --------------------------------------------------
+# 4. Route d'accueil
+# --------------------------------------------------
+
+@app.get("/")
+def home():
+    return {
+        "message": "Bienvenue dans l'API Churn",
+        "documentation": "/docs",
+        "health": "/health"
+    }
+
+# --------------------------------------------------
+# 5. Vérification de l'API
+# --------------------------------------------------
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-# 5. Route pour predire le churn
+# --------------------------------------------------
+# 6. Prédiction du churn
+# --------------------------------------------------
+
 @app.post("/predict")
 def predict(client: Client):
-    # Transformer les donnees du client en DataFrame
+
     ligne = pd.DataFrame([client.model_dump()])
 
-    # Transformer abonnement en colonnes numeriques
-    ligne = pd.get_dummies(ligne, columns=["abonnement"], dtype=int)
+    ligne = pd.get_dummies(ligne)
 
-    # Garder les colonnes attendues par le modele
-    ligne = ligne.reindex(columns=features, fill_value=0)
+    ligne = ligne.reindex(
+        columns=model.feature_names_in_,
+        fill_value=0
+    )
 
-    # Effectuer la prediction
     resultat = int(model.predict(ligne)[0])
 
-    # Retourner le resultat au format JSON
     return {
         "churn": resultat,
         "message": (
