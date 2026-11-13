@@ -1,0 +1,42 @@
+﻿
+services:
+
+  # ----- Service 1 : le serveur MLflow (tracking + Registry) -----
+  mlflow:
+    # Image officielle
+    image: mlflow-tp:3.17.1
+
+    # Commande de dÃ©marrage du serveur
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+
+    # Interface MLflow
+    ports:
+      - "5000:5000"
+
+    # Volume persistant
+    volumes:
+      - mlflow-data:/mlflow
+
+  # ----- Service 2 : notre API -----
+  api:
+    build: .
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_URI: models:/churn-model@champion
+
+    depends_on:
+      - mlflow
+
+    restart: on-failure
+
+# ----- DÃ©claration du volume nommÃ© -----
+volumes:
+  mlflow-data:
+
